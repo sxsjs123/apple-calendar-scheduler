@@ -1,0 +1,16 @@
+{
+  "name": "apple-calendar-scheduler",
+  "version": "1.0.0",
+  "description": "Simple schedule booking page with Apple Calendar ICS export.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.5.0"
+  },
+  "private": true
+}

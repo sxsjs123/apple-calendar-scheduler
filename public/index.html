@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>日程预约</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="toolbar" aria-label="预约概览">
+        <div>
+          <p class="eyebrow">Schedule Booking</p>
+          <h1>日程预约</h1>
+        </div>
+        <div class="toolbar-actions">
+          <a class="ghost-button" id="downloadCalendar" href="/calendar.ics">下载全部</a>
+          <a class="primary-button" id="openSubscription" href="/calendar.ics">打开全部订阅</a>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <div class="side-stack">
+          <section class="user-panel">
+            <div class="form-head">
+              <div>
+                <p class="eyebrow">Booking Users</p>
+                <h2>预约用户</h2>
+              </div>
+              <div class="user-head-actions">
+                <span class="count-pill" id="userCount">0 位</span>
+                <button class="primary-button" id="openUserDialog" type="button">添加预约用户</button>
+              </div>
+            </div>
+
+            <div class="empty-state compact" id="userEmptyState">暂无预约用户</div>
+            <ul class="user-list" id="userList"></ul>
+          </section>
+
+          <form class="booking-form" id="bookingForm">
+            <div class="form-head">
+              <h2>新预约</h2>
+              <button class="icon-button" type="reset" title="清空表单" aria-label="清空表单">×</button>
+            </div>
+
+            <label>
+              <span>预约用户</span>
+              <select name="userId" id="bookingUser" required></select>
+            </label>
+
+            <label>
+              <span>申请人</span>
+              <input name="applicant" autocomplete="name" required maxlength="50" placeholder="例如：王小明">
+            </label>
+
+            <label>
+              <span>日期</span>
+              <input name="date" type="date" required>
+            </label>
+
+            <div class="time-grid">
+              <label>
+                <span>开始时间</span>
+                <input name="startTime" type="time" required step="60">
+              </label>
+              <label>
+                <span>结束时间</span>
+                <input name="endTime" type="time" required step="60">
+              </label>
+            </div>
+
+            <label>
+              <span>原因</span>
+              <textarea name="reason" maxlength="180" rows="5" placeholder="例如：会议室预约、客户沟通、项目评审"></textarea>
+            </label>
+
+            <div class="form-actions">
+              <button class="primary-button" id="saveBooking" type="submit">保存预约</button>
+              <p class="status" id="status" role="status"></p>
+            </div>
+          </form>
+        </div>
+
+        <section class="calendar-panel">
+          <div class="subscription-box">
+            <div class="subscription-head">
+              <div>
+                <p class="eyebrow">Apple Calendar</p>
+                <h2>订阅地址</h2>
+              </div>
+              <select id="subscriptionUser" aria-label="选择订阅用户"></select>
+            </div>
+            <div class="copy-row">
+              <input id="subscriptionUrl" readonly>
+              <a class="ghost-button" id="openSelectedSubscription" href="/calendar.ics">打开</a>
+              <button class="ghost-button" id="copySubscription" type="button">复制</button>
+            </div>
+            <p class="subscription-info" id="subscriptionInfo"></p>
+          </div>
+
+          <div class="list-head">
+            <div>
+              <h2>预约列表</h2>
+              <span id="bookingCount">0 条</span>
+            </div>
+            <select id="bookingFilter" aria-label="筛选预约列表"></select>
+          </div>
+          <div class="empty-state" id="emptyState">暂无预约</div>
+          <ul class="booking-list" id="bookingList"></ul>
+        </section>
+      </section>
+    </main>
+
+    <dialog class="modal" id="userDialog">
+      <form class="modal-card user-form" id="userForm">
+        <div class="form-head">
+          <div>
+            <p class="eyebrow">Booking Users</p>
+            <h2>添加预约用户</h2>
+          </div>
+          <button class="icon-button" id="closeUserDialog" type="button" title="关闭" aria-label="关闭">×</button>
+        </div>
+
+        <label>
+          <span>用户名称</span>
+          <input name="name" required maxlength="50" placeholder="例如：李老师">
+        </label>
+
+        <label>
+          <span>备注</span>
+          <input name="note" maxlength="120" placeholder="例如：A 会议室负责人">
+        </label>
+
+        <div class="form-actions">
+          <button class="primary-button" type="submit">添加用户</button>
+          <p class="status" id="userStatus" role="status"></p>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
