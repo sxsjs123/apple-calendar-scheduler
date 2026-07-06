@@ -11,6 +11,7 @@ const emptyState = document.querySelector("#emptyState");
 const userList = document.querySelector("#userList");
 const userCount = document.querySelector("#userCount");
 const userEmptyState = document.querySelector("#userEmptyState");
+const userPanelStatusEl = document.querySelector("#userPanelStatus");
 const bookingUser = document.querySelector("#bookingUser");
 const bookingFilter = document.querySelector("#bookingFilter");
 const saveBooking = document.querySelector("#saveBooking");
@@ -22,25 +23,51 @@ const copySubscription = document.querySelector("#copySubscription");
 const openSelectedSubscription = document.querySelector("#openSelectedSubscription");
 const openSubscription = document.querySelector("#openSubscription");
 const downloadCalendar = document.querySelector("#downloadCalendar");
+const calendarTitle = document.querySelector("#calendarTitle");
+const calendarGrid = document.querySelector("#calendarGrid");
+const prevMonth = document.querySelector("#prevMonth");
+const currentMonth = document.querySelector("#currentMonth");
+const nextMonth = document.querySelector("#nextMonth");
 
 let users = [];
 let bookings = [];
 let selectedBookingUserId = "";
 let selectedSubscriptionUserId = "";
 let selectedBookingFilterId = "";
+let visibleMonth = new Date();
+let statusTimer;
+let userStatusTimer;
+let userPanelStatusTimer;
 
 const allCalendarUrl = `${window.location.origin}/calendar.ics`;
 downloadCalendar.href = allCalendarUrl;
 openSubscription.href = toWebcalUrl(allCalendarUrl);
 
 function showStatus(message, isError = false) {
+  window.clearTimeout(statusTimer);
   statusEl.textContent = message;
   statusEl.classList.toggle("error", isError);
+  if (message && !isError) {
+    statusTimer = window.setTimeout(() => showStatus(""), 5000);
+  }
 }
 
 function showUserStatus(message, isError = false) {
+  window.clearTimeout(userStatusTimer);
   userStatusEl.textContent = message;
   userStatusEl.classList.toggle("error", isError);
+  if (message && !isError) {
+    userStatusTimer = window.setTimeout(() => showUserStatus(""), 5000);
+  }
+}
+
+function showUserPanelStatus(message, isError = false) {
+  window.clearTimeout(userPanelStatusTimer);
+  userPanelStatusEl.textContent = message;
+  userPanelStatusEl.classList.toggle("error", isError);
+  if (message && !isError) {
+    userPanelStatusTimer = window.setTimeout(() => showUserPanelStatus(""), 5000);
+  }
 }
 
 async function fetchJson(url, options) {
@@ -51,10 +78,13 @@ async function fetchJson(url, options) {
 }
 
 function todayInputValue() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
+  return dateInputValue(new Date());
+}
+
+function dateInputValue(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
@@ -81,6 +111,13 @@ function formatDate(date) {
   }).format(new Date(`${date}T00:00:00`));
 }
 
+function formatMonthTitle(date) {
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "long"
+  }).format(date);
+}
+
 function toWebcalUrl(url) {
   return url.replace(/^https?:\/\//, "webcal://");
 }
@@ -96,6 +133,10 @@ function findUser(userId) {
 
 function bookingsForUser(userId) {
   return userId ? bookings.filter(booking => booking.userId === userId) : bookings;
+}
+
+function visibleBookings() {
+  return bookingsForUser(selectedBookingFilterId);
 }
 
 function sortUsers(nextUsers) {
@@ -134,6 +175,9 @@ function normalizeSelections() {
   }
   if (selectedBookingFilterId && !findUser(selectedBookingFilterId)) {
     selectedBookingFilterId = "";
+  }
+  if (!selectedBookingUserId && users.length > 0) {
+    selectedBookingUserId = users[0].id;
   }
 }
 
@@ -274,12 +318,65 @@ function renderSubscription() {
 }
 
 function renderBookings() {
-  const visibleBookings = bookingsForUser(selectedBookingFilterId);
-  bookingList.replaceChildren(...visibleBookings.map(bookingTemplate));
+  const filteredBookings = visibleBookings();
+  bookingList.replaceChildren(...filteredBookings.map(bookingTemplate));
   bookingCount.textContent = selectedBookingFilterId
-    ? `${visibleBookings.length} / ${bookings.length} 条`
+    ? `${filteredBookings.length} / ${bookings.length} 条`
     : `${bookings.length} 条`;
-  emptyState.hidden = visibleBookings.length > 0;
+  emptyState.hidden = filteredBookings.length > 0;
+}
+
+function renderCalendar() {
+  const year = visibleMonth.getFullYear();
+  const month = visibleMonth.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const leadingDays = (firstDay.getDay() + 6) % 7;
+  const monthStart = new Date(year, month, 1 - leadingDays);
+  const counts = new Map();
+
+  for (const booking of visibleBookings()) {
+    counts.set(booking.date, (counts.get(booking.date) || 0) + 1);
+  }
+
+  calendarTitle.textContent = formatMonthTitle(visibleMonth);
+  const today = todayInputValue();
+  const cells = [];
+
+  for (let index = 0; index < 42; index += 1) {
+    const date = new Date(monthStart);
+    date.setDate(monthStart.getDate() + index);
+    const value = dateInputValue(date);
+    const count = counts.get(value) || 0;
+    const cell = document.createElement("button");
+    cell.className = "calendar-day";
+    cell.type = "button";
+    cell.dataset.date = value;
+    cell.classList.toggle("muted-day", date.getMonth() !== month);
+    cell.classList.toggle("today", value === today);
+    cell.classList.toggle("has-bookings", count > 0);
+    cell.setAttribute("aria-label", count > 0 ? `${value}，${count} 条预约` : `${value}，无预约`);
+
+    const dayNumber = document.createElement("span");
+    dayNumber.className = "calendar-day-number";
+    dayNumber.textContent = String(date.getDate());
+    cell.append(dayNumber);
+
+    if (count > 0) {
+      const badge = document.createElement("span");
+      badge.className = "calendar-count";
+      badge.textContent = `${count} 条`;
+      cell.append(badge);
+    }
+
+    cell.addEventListener("click", () => {
+      form.date.value = value;
+      form.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    cells.push(cell);
+  }
+
+  calendarGrid.replaceChildren(...cells);
 }
 
 function renderAll() {
@@ -288,6 +385,7 @@ function renderAll() {
   renderUsers();
   renderSubscription();
   renderBookings();
+  renderCalendar();
 }
 
 async function loadUsers() {
@@ -317,11 +415,12 @@ async function createUser(event) {
 
     userForm.reset();
     users = sortUsers([...users, data.user]);
-    selectedBookingUserId = data.user.id;
+    selectedBookingUserId = users[0]?.id || data.user.id;
     selectedSubscriptionUserId = data.user.id;
     selectedBookingFilterId = data.user.id;
     renderAll();
     closeAddUserDialog();
+    showUserPanelStatus("数据已保存。");
   } catch (error) {
     showUserStatus(error.message, true);
   } finally {
@@ -349,7 +448,7 @@ async function createBooking(event) {
     setDefaultTimes();
     bookings = sortBookings([...bookings, withUserName(data.booking)]);
     renderAll();
-    showStatus("已保存。");
+    showStatus("数据已保存。");
   } catch (error) {
     showStatus(error.message, true);
   } finally {
@@ -361,7 +460,7 @@ async function deleteUser(id) {
   const user = findUser(id);
   if (!user || !window.confirm(`确定删除“${user.name}”？`)) return;
   if (bookingsForUser(id).length > 0) {
-    showUserStatus("该用户已有预约，不能删除", true);
+    showUserPanelStatus("该用户已有预约，不能删除", true);
     return;
   }
 
@@ -371,18 +470,18 @@ async function deleteUser(id) {
   const previousBookingFilterId = selectedBookingFilterId;
   users = users.filter(item => item.id !== id);
   renderAll();
-  showUserStatus("删除中...");
+  showUserPanelStatus("写入数据...");
 
   try {
     await fetchJson(`/api/users/${encodeURIComponent(id)}`, { method: "DELETE" });
-    showUserStatus("已删除。");
+    showUserPanelStatus("数据已保存。");
   } catch (error) {
     users = previousUsers;
     selectedBookingUserId = previousBookingUserId;
     selectedSubscriptionUserId = previousSubscriptionUserId;
     selectedBookingFilterId = previousBookingFilterId;
     renderAll();
-    showUserStatus(error.message, true);
+    showUserPanelStatus(error.message, true);
   }
 }
 
@@ -391,11 +490,11 @@ async function deleteBooking(id) {
   const previousBookings = bookings;
   bookings = bookings.filter(booking => booking.id !== id);
   renderAll();
-  showStatus("删除中...");
+  showStatus("写入数据...");
 
   try {
     await fetchJson(`/api/bookings/${id}`, { method: "DELETE" });
-    showStatus("已删除。");
+    showStatus("数据已保存。");
   } catch (error) {
     bookings = previousBookings;
     renderAll();
@@ -452,6 +551,22 @@ bookingUser.addEventListener("change", () => {
 bookingFilter.addEventListener("change", () => {
   selectedBookingFilterId = bookingFilter.value;
   renderBookings();
+  renderCalendar();
+});
+
+prevMonth.addEventListener("click", () => {
+  visibleMonth = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() - 1, 1);
+  renderCalendar();
+});
+
+currentMonth.addEventListener("click", () => {
+  visibleMonth = new Date();
+  renderCalendar();
+});
+
+nextMonth.addEventListener("click", () => {
+  visibleMonth = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 1);
+  renderCalendar();
 });
 
 userForm.addEventListener("submit", createUser);

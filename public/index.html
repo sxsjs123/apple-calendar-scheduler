@@ -36,6 +36,7 @@
 
             <div class="empty-state compact" id="userEmptyState">暂无预约用户</div>
             <ul class="user-list" id="userList"></ul>
+            <p class="status panel-status" id="userPanelStatus" role="status"></p>
           </section>
 
           <form class="booking-form" id="bookingForm">
@@ -108,6 +109,30 @@
           </div>
           <div class="empty-state" id="emptyState">暂无预约</div>
           <ul class="booking-list" id="bookingList"></ul>
+
+          <section class="month-calendar" aria-label="预约日历统计">
+            <div class="month-calendar-head">
+              <div>
+                <p class="eyebrow">Calendar View</p>
+                <h2 id="calendarTitle">预约日历</h2>
+              </div>
+              <div class="calendar-controls">
+                <button class="icon-button" id="prevMonth" type="button" title="上个月" aria-label="上个月">‹</button>
+                <button class="ghost-button" id="currentMonth" type="button">本月</button>
+                <button class="icon-button" id="nextMonth" type="button" title="下个月" aria-label="下个月">›</button>
+              </div>
+            </div>
+            <div class="calendar-weekdays" aria-hidden="true">
+              <span>一</span>
+              <span>二</span>
+              <span>三</span>
+              <span>四</span>
+              <span>五</span>
+              <span>六</span>
+              <span>日</span>
+            </div>
+            <div class="calendar-grid" id="calendarGrid"></div>
+          </section>
         </section>
       </section>
     </main>
