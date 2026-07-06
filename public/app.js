@@ -14,6 +14,7 @@ const userEmptyState = document.querySelector("#userEmptyState");
 const bookingUser = document.querySelector("#bookingUser");
 const bookingFilter = document.querySelector("#bookingFilter");
 const saveBooking = document.querySelector("#saveBooking");
+const saveUser = userForm.querySelector('button[type="submit"]');
 const subscriptionUser = document.querySelector("#subscriptionUser");
 const subscriptionUrl = document.querySelector("#subscriptionUrl");
 const subscriptionInfo = document.querySelector("#subscriptionInfo");
@@ -95,6 +96,26 @@ function findUser(userId) {
 
 function bookingsForUser(userId) {
   return userId ? bookings.filter(booking => booking.userId === userId) : bookings;
+}
+
+function sortUsers(nextUsers) {
+  return nextUsers.slice().sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
+}
+
+function sortBookings(nextBookings) {
+  return nextBookings.slice().sort((a, b) => {
+    const left = `${a.date}T${a.startTime}`;
+    const right = `${b.date}T${b.startTime}`;
+    return left.localeCompare(right);
+  });
+}
+
+function withUserName(booking) {
+  const user = findUser(booking.userId);
+  return {
+    ...booking,
+    userName: booking.userName || user?.name || "未知用户"
+  };
 }
 
 function makeOption(value, label) {
@@ -271,17 +292,18 @@ function renderAll() {
 
 async function loadUsers() {
   const data = await fetchJson("/api/users");
-  users = data.users;
+  users = sortUsers(data.users);
 }
 
 async function loadBookings() {
   const data = await fetchJson("/api/bookings");
-  bookings = data.bookings;
+  bookings = sortBookings(data.bookings);
 }
 
 async function createUser(event) {
   event.preventDefault();
   showUserStatus("添加中...");
+  saveUser.disabled = true;
 
   const formData = new FormData(userForm);
   const payload = Object.fromEntries(formData.entries());
@@ -294,26 +316,29 @@ async function createUser(event) {
     });
 
     userForm.reset();
+    users = sortUsers([...users, data.user]);
     selectedBookingUserId = data.user.id;
     selectedSubscriptionUserId = data.user.id;
     selectedBookingFilterId = data.user.id;
-    await loadUsers();
     renderAll();
     closeAddUserDialog();
   } catch (error) {
     showUserStatus(error.message, true);
+  } finally {
+    saveUser.disabled = false;
   }
 }
 
 async function createBooking(event) {
   event.preventDefault();
   showStatus("保存中...");
+  saveBooking.disabled = true;
 
   const formData = new FormData(form);
   const payload = Object.fromEntries(formData.entries());
 
   try {
-    await fetchJson("/api/bookings", {
+    const data = await fetchJson("/api/bookings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
@@ -322,37 +347,58 @@ async function createBooking(event) {
     form.reset();
     selectedBookingUserId = payload.userId;
     setDefaultTimes();
-    await loadBookings();
+    bookings = sortBookings([...bookings, withUserName(data.booking)]);
     renderAll();
     showStatus("已保存。");
   } catch (error) {
     showStatus(error.message, true);
+  } finally {
+    saveBooking.disabled = users.length === 0;
   }
 }
 
 async function deleteUser(id) {
   const user = findUser(id);
   if (!user || !window.confirm(`确定删除“${user.name}”？`)) return;
+  if (bookingsForUser(id).length > 0) {
+    showUserStatus("该用户已有预约，不能删除", true);
+    return;
+  }
+
+  const previousUsers = users;
+  const previousBookingUserId = selectedBookingUserId;
+  const previousSubscriptionUserId = selectedSubscriptionUserId;
+  const previousBookingFilterId = selectedBookingFilterId;
+  users = users.filter(item => item.id !== id);
+  renderAll();
+  showUserStatus("删除中...");
 
   try {
     await fetchJson(`/api/users/${encodeURIComponent(id)}`, { method: "DELETE" });
-    await loadUsers();
-    renderAll();
     showUserStatus("已删除。");
   } catch (error) {
+    users = previousUsers;
+    selectedBookingUserId = previousBookingUserId;
+    selectedSubscriptionUserId = previousSubscriptionUserId;
+    selectedBookingFilterId = previousBookingFilterId;
+    renderAll();
     showUserStatus(error.message, true);
   }
 }
 
 async function deleteBooking(id) {
   if (!window.confirm("确定删除这条预约？")) return;
+  const previousBookings = bookings;
+  bookings = bookings.filter(booking => booking.id !== id);
+  renderAll();
+  showStatus("删除中...");
 
   try {
     await fetchJson(`/api/bookings/${id}`, { method: "DELETE" });
-    await loadBookings();
-    renderAll();
     showStatus("已删除。");
   } catch (error) {
+    bookings = previousBookings;
+    renderAll();
     showStatus(error.message, true);
   }
 }
