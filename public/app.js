@@ -14,6 +14,12 @@ const userEmptyState = document.querySelector("#userEmptyState");
 const userPanelStatusEl = document.querySelector("#userPanelStatus");
 const bookingUser = document.querySelector("#bookingUser");
 const bookingFilter = document.querySelector("#bookingFilter");
+const bookingSearch = document.querySelector("#bookingSearch");
+const dateFilter = document.querySelector("#dateFilter");
+const startDateFilter = document.querySelector("#startDateFilter");
+const endDateFilter = document.querySelector("#endDateFilter");
+const dateRangeFilters = document.querySelector("#dateRangeFilters");
+const resetFilters = document.querySelector("#resetFilters");
 const saveBooking = document.querySelector("#saveBooking");
 const saveUser = userForm.querySelector('button[type="submit"]');
 const subscriptionUser = document.querySelector("#subscriptionUser");
@@ -34,6 +40,10 @@ let bookings = [];
 let selectedBookingUserId = "";
 let selectedSubscriptionUserId = "";
 let selectedBookingFilterId = "";
+let bookingSearchText = "";
+let selectedDateFilter = "all";
+let customStartDate = "";
+let customEndDate = "";
 let visibleMonth = new Date();
 let statusTimer;
 let userStatusTimer;
@@ -135,8 +145,82 @@ function bookingsForUser(userId) {
   return userId ? bookings.filter(booking => booking.userId === userId) : bookings;
 }
 
+function addLocalDays(date, dayCount) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + dayCount);
+  return next;
+}
+
+function dateBoundsForFilter() {
+  const now = new Date();
+  const today = todayInputValue();
+
+  if (selectedDateFilter === "today") {
+    return { start: today, end: today };
+  }
+
+  if (selectedDateFilter === "week") {
+    const dayOffset = (now.getDay() + 6) % 7;
+    const start = addLocalDays(now, -dayOffset);
+    const end = addLocalDays(start, 6);
+    return { start: dateInputValue(start), end: dateInputValue(end) };
+  }
+
+  if (selectedDateFilter === "month") {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return { start: dateInputValue(start), end: dateInputValue(end) };
+  }
+
+  if (selectedDateFilter === "upcoming") {
+    return { start: today, end: "" };
+  }
+
+  if (selectedDateFilter === "custom") {
+    return { start: customStartDate, end: customEndDate };
+  }
+
+  return { start: "", end: "" };
+}
+
+function matchesDateFilter(booking) {
+  const { start, end } = dateBoundsForFilter();
+  if (start && booking.date < start) return false;
+  if (end && booking.date > end) return false;
+  return true;
+}
+
+function matchesSearch(booking) {
+  if (!bookingSearchText) return true;
+  const text = [
+    booking.userName,
+    booking.applicant,
+    booking.reason,
+    booking.date,
+    booking.startTime,
+    booking.endTime
+  ].join(" ").toLowerCase();
+  return text.includes(bookingSearchText);
+}
+
+function hasActiveDateFilter() {
+  if (selectedDateFilter === "all") return false;
+  if (selectedDateFilter === "custom") return Boolean(customStartDate || customEndDate);
+  return true;
+}
+
+function hasActiveBookingFilters() {
+  return Boolean(
+    selectedBookingFilterId ||
+      bookingSearchText ||
+      hasActiveDateFilter()
+  );
+}
+
 function visibleBookings() {
-  return bookingsForUser(selectedBookingFilterId);
+  return bookingsForUser(selectedBookingFilterId)
+    .filter(matchesDateFilter)
+    .filter(matchesSearch);
 }
 
 function sortUsers(nextUsers) {
@@ -149,6 +233,11 @@ function sortBookings(nextBookings) {
     const right = `${b.date}T${b.startTime}`;
     return left.localeCompare(right);
   });
+}
+
+function timeToMinutes(value) {
+  const [hour, minute] = value.split(":").map(Number);
+  return hour * 60 + minute;
 }
 
 function withUserName(booking) {
@@ -204,6 +293,14 @@ function renderSelects() {
   bookingFilter.value = selectedBookingFilterId;
 }
 
+function renderDateFilters() {
+  bookingSearch.value = bookingSearchText;
+  dateFilter.value = selectedDateFilter;
+  startDateFilter.value = customStartDate;
+  endDateFilter.value = customEndDate;
+  dateRangeFilters.classList.toggle("is-visible", selectedDateFilter === "custom");
+}
+
 function userTemplate(user) {
   const item = document.createElement("li");
   item.className = "user-item";
@@ -239,9 +336,9 @@ function userTemplate(user) {
     form.applicant.focus();
   });
 
-  const showSubscription = document.createElement("button");
+  const showSubscription = document.createElement("a");
   showSubscription.className = "ghost-button";
-  showSubscription.type = "button";
+  showSubscription.href = toWebcalUrl(calendarUrlForUser(user.id));
   showSubscription.textContent = "订阅";
   showSubscription.addEventListener("click", () => {
     selectedSubscriptionUserId = user.id;
@@ -320,9 +417,12 @@ function renderSubscription() {
 function renderBookings() {
   const filteredBookings = visibleBookings();
   bookingList.replaceChildren(...filteredBookings.map(bookingTemplate));
-  bookingCount.textContent = selectedBookingFilterId
+  bookingCount.textContent = hasActiveBookingFilters()
     ? `${filteredBookings.length} / ${bookings.length} 条`
     : `${bookings.length} 条`;
+  emptyState.textContent = bookings.length > 0 && filteredBookings.length === 0
+    ? "没有符合条件的预约"
+    : "暂无预约";
   emptyState.hidden = filteredBookings.length > 0;
 }
 
@@ -382,6 +482,7 @@ function renderCalendar() {
 function renderAll() {
   normalizeSelections();
   renderSelects();
+  renderDateFilters();
   renderUsers();
   renderSubscription();
   renderBookings();
@@ -430,11 +531,21 @@ async function createUser(event) {
 
 async function createBooking(event) {
   event.preventDefault();
-  showStatus("保存中...");
-  saveBooking.disabled = true;
 
   const formData = new FormData(form);
   const payload = Object.fromEntries(formData.entries());
+  if (
+    payload.startTime &&
+    payload.endTime &&
+    timeToMinutes(payload.endTime) <= timeToMinutes(payload.startTime)
+  ) {
+    showStatus("结束时间必须晚于开始时间", true);
+    form.endTime.focus();
+    return;
+  }
+
+  showStatus("保存中...");
+  saveBooking.disabled = true;
 
   try {
     const data = await fetchJson("/api/bookings", {
@@ -474,7 +585,7 @@ async function deleteUser(id) {
 
   try {
     await fetchJson(`/api/users/${encodeURIComponent(id)}`, { method: "DELETE" });
-    showUserPanelStatus("数据已保存。");
+    showUserPanelStatus("数据已保存，数据同步可能延迟几秒。");
   } catch (error) {
     users = previousUsers;
     selectedBookingUserId = previousBookingUserId;
@@ -494,7 +605,7 @@ async function deleteBooking(id) {
 
   try {
     await fetchJson(`/api/bookings/${id}`, { method: "DELETE" });
-    showStatus("数据已保存。");
+    showStatus("数据已保存，数据同步可能延迟几秒。");
   } catch (error) {
     bookings = previousBookings;
     renderAll();
@@ -552,6 +663,44 @@ bookingFilter.addEventListener("change", () => {
   selectedBookingFilterId = bookingFilter.value;
   renderBookings();
   renderCalendar();
+});
+
+bookingSearch.addEventListener("input", () => {
+  bookingSearchText = bookingSearch.value.trim().toLowerCase();
+  renderBookings();
+  renderCalendar();
+});
+
+dateFilter.addEventListener("change", () => {
+  selectedDateFilter = dateFilter.value;
+  renderDateFilters();
+  renderBookings();
+  renderCalendar();
+});
+
+startDateFilter.addEventListener("input", () => {
+  customStartDate = startDateFilter.value;
+  selectedDateFilter = "custom";
+  renderDateFilters();
+  renderBookings();
+  renderCalendar();
+});
+
+endDateFilter.addEventListener("input", () => {
+  customEndDate = endDateFilter.value;
+  selectedDateFilter = "custom";
+  renderDateFilters();
+  renderBookings();
+  renderCalendar();
+});
+
+resetFilters.addEventListener("click", () => {
+  selectedBookingFilterId = "";
+  bookingSearchText = "";
+  selectedDateFilter = "all";
+  customStartDate = "";
+  customEndDate = "";
+  renderAll();
 });
 
 prevMonth.addEventListener("click", () => {

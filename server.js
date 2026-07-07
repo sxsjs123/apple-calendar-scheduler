@@ -215,6 +215,38 @@ function minutes(value) {
   return hour * 60 + minute;
 }
 
+function dayIndex(value) {
+  const [year, month, day] = value.split("-").map(Number);
+  return Math.floor(Date.UTC(year, month - 1, day) / 86400000);
+}
+
+function bookingRange(value) {
+  const start = dayIndex(value.date) * 1440 + minutes(value.startTime);
+  const end = dayIndex(value.date) * 1440 + minutes(value.endTime);
+  return { start, end };
+}
+
+function rangesOverlap(left, right) {
+  return left.start < right.end && right.start < left.end;
+}
+
+function hasBookingConflict(input, bookings) {
+  const nextRange = bookingRange(input);
+  return bookings.some(booking => {
+    if (booking.userId !== input.userId) return false;
+    if (
+      !isValidDate(booking.date) ||
+      !isValidTime(booking.startTime) ||
+      !isValidTime(booking.endTime) ||
+      minutes(booking.endTime) <= minutes(booking.startTime)
+    ) {
+      return false;
+    }
+
+    return rangesOverlap(nextRange, bookingRange(booking));
+  });
+}
+
 function normalizeText(value) {
   return String(value || "").trim().replace(/\s+/g, " ");
 }
@@ -242,7 +274,7 @@ function makeUser(input) {
   };
 }
 
-function validateBooking(input, users) {
+function validateBooking(input, users, bookings = []) {
   const applicant = normalizeText(input.applicant);
   const userId = String(input.userId || "").trim();
   const date = String(input.date || "").trim();
@@ -255,7 +287,12 @@ function validateBooking(input, users) {
   if (!isValidDate(date)) return "请选择有效日期";
   if (!isValidTime(startTime)) return "请选择有效开始时间";
   if (!isValidTime(endTime)) return "请选择有效结束时间";
-  if (endTime === startTime) return "结束时间不能等于开始时间";
+  if (minutes(endTime) <= minutes(startTime)) {
+    return "结束时间必须晚于开始时间";
+  }
+  if (hasBookingConflict({ userId, date, startTime, endTime }, bookings)) {
+    return "该预约用户在这个时间段已有预约";
+  }
 
   return null;
 }
@@ -474,13 +511,13 @@ async function handleApi(req, res, url) {
   if (req.method === "POST" && url.pathname === "/api/bookings") {
     const input = await readRequestJson(req);
     const users = await readUsers();
-    const error = validateBooking(input, users);
+    const bookings = await readBookings();
+    const error = validateBooking(input, users, bookings);
     if (error) {
       sendJson(res, 400, { error });
       return;
     }
 
-    const bookings = await readBookings();
     const booking = makeBooking(input);
     bookings.push(booking);
     await writeBookings(bookings);

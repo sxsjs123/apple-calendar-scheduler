@@ -105,7 +105,23 @@
               <h2>预约列表</h2>
               <span id="bookingCount">0 条</span>
             </div>
-            <select id="bookingFilter" aria-label="筛选预约列表"></select>
+            <div class="list-tools" aria-label="筛选预约">
+              <input id="bookingSearch" type="search" placeholder="搜索申请人、原因、用户" aria-label="搜索预约">
+              <select id="bookingFilter" aria-label="按预约用户筛选"></select>
+              <select id="dateFilter" aria-label="按日期筛选">
+                <option value="all">全部日期</option>
+                <option value="today">今天</option>
+                <option value="week">本周</option>
+                <option value="month">本月</option>
+                <option value="upcoming">未来预约</option>
+                <option value="custom">自定义日期</option>
+              </select>
+              <button class="ghost-button" id="resetFilters" type="button">重置</button>
+              <div class="date-range" id="dateRangeFilters">
+                <input id="startDateFilter" type="date" aria-label="开始日期">
+                <input id="endDateFilter" type="date" aria-label="结束日期">
+              </div>
+            </div>
           </div>
           <div class="empty-state" id="emptyState">暂无预约</div>
           <ul class="booking-list" id="bookingList"></ul>
