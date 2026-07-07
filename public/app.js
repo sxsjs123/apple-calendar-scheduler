@@ -52,6 +52,7 @@ let userPanelStatusTimer;
 const allCalendarUrl = `${window.location.origin}/calendar.ics`;
 downloadCalendar.href = allCalendarUrl;
 openSubscription.href = toWebcalUrl(allCalendarUrl);
+const DEFAULT_BOOKING_DURATION_MINUTES = 120;
 
 function showStatus(message, isError = false) {
   window.clearTimeout(statusTimer);
@@ -100,10 +101,24 @@ function dateInputValue(date) {
 
 function setDefaultTimes() {
   const now = new Date();
-  const end = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+  const end = new Date(now.getTime() + DEFAULT_BOOKING_DURATION_MINUTES * 60 * 1000);
   form.date.value = todayInputValue();
   form.startTime.value = timeInputValue(now);
   form.endTime.value = timeInputValue(end);
+}
+
+function timeValueFromMinutes(totalMinutes) {
+  const normalizedMinutes = ((totalMinutes % 1440) + 1440) % 1440;
+  const hour = String(Math.floor(normalizedMinutes / 60)).padStart(2, "0");
+  const minute = String(normalizedMinutes % 60).padStart(2, "0");
+  return `${hour}:${minute}`;
+}
+
+function syncEndTimeFromStart() {
+  if (!form.startTime.value) return;
+  form.endTime.value = timeValueFromMinutes(
+    timeToMinutes(form.startTime.value) + DEFAULT_BOOKING_DURATION_MINUTES
+  );
 }
 
 function timeInputValue(date) {
@@ -658,6 +673,9 @@ subscriptionUser.addEventListener("change", () => {
 bookingUser.addEventListener("change", () => {
   selectedBookingUserId = bookingUser.value;
 });
+
+form.startTime.addEventListener("input", syncEndTimeFromStart);
+form.startTime.addEventListener("change", syncEndTimeFromStart);
 
 bookingFilter.addEventListener("change", () => {
   selectedBookingFilterId = bookingFilter.value;
