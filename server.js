@@ -6,6 +6,7 @@ const crypto = require("node:crypto");
 const PORT = Number(process.env.PORT || 3000);
 const TIMEZONE = process.env.CALENDAR_TZ || "Asia/Shanghai";
 const CALENDAR_NAME = process.env.CALENDAR_NAME || "预约日程";
+const CALENDAR_REFRESH_INTERVAL = process.env.CALENDAR_REFRESH_INTERVAL || "PT5M";
 const ROOT_DIR = __dirname;
 const PUBLIC_DIR = path.join(ROOT_DIR, "public");
 const DATA_DIR = path.join(ROOT_DIR, "data");
@@ -168,6 +169,16 @@ function sendJson(res, status, data) {
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store"
   });
+}
+
+function calendarHeaders(contentDisposition) {
+  return {
+    "Content-Type": "text/calendar; charset=utf-8",
+    "Content-Disposition": contentDisposition,
+    "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0"
+  };
 }
 
 function notFound(res) {
@@ -387,7 +398,9 @@ function buildCalendar(bookings, origin, options = {}) {
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     `X-WR-CALNAME:${icsEscape(calendarName)}`,
-    `X-WR-TIMEZONE:${TIMEZONE}`
+    `X-WR-TIMEZONE:${TIMEZONE}`,
+    `REFRESH-INTERVAL;VALUE=DURATION:${CALENDAR_REFRESH_INTERVAL}`,
+    `X-PUBLISHED-TTL:${CALENDAR_REFRESH_INTERVAL}`
   ];
   const eventBlocks = bookings.map(booking => eventToIcs(booking, origin, userMap));
   const sections = [
@@ -542,10 +555,12 @@ async function handleApi(req, res, url) {
     const user = booking.userId ? userMap.get(booking.userId) : null;
     const calendarName = user ? `${CALENDAR_NAME} - ${user.name}` : CALENDAR_NAME;
     const calendar = buildCalendar([booking], getOrigin(req), { calendarName, userMap });
-    send(res, 200, calendar, {
-      "Content-Type": "text/calendar; charset=utf-8",
-      "Content-Disposition": `attachment; filename=\"booking-${booking.date}.ics\"`
-    });
+    send(
+      res,
+      200,
+      calendar,
+      calendarHeaders(`attachment; filename=\"booking-${booking.date}.ics\"`)
+    );
     return;
   }
 
@@ -575,11 +590,7 @@ const server = http.createServer(async (req, res) => {
       const users = await readUsers();
       const userMap = new Map(users.map(user => [user.id, user]));
       const calendar = buildCalendar(bookings, getOrigin(req), { userMap });
-      send(res, 200, calendar, {
-        "Content-Type": "text/calendar; charset=utf-8",
-        "Content-Disposition": "inline; filename=\"bookings.ics\"",
-        "Cache-Control": "no-cache"
-      });
+      send(res, 200, calendar, calendarHeaders("inline; filename=\"bookings.ics\""));
       return;
     }
 
@@ -600,11 +611,12 @@ const server = http.createServer(async (req, res) => {
         calendarName: `${CALENDAR_NAME} - ${user.name}`,
         userMap
       });
-      send(res, 200, calendar, {
-        "Content-Type": "text/calendar; charset=utf-8",
-        "Content-Disposition": `inline; filename=\"bookings-${safeFilename(user.name, user.id)}.ics\"`,
-        "Cache-Control": "no-cache"
-      });
+      send(
+        res,
+        200,
+        calendar,
+        calendarHeaders(`inline; filename=\"bookings-${safeFilename(user.name, user.id)}.ics\"`)
+      );
       return;
     }
 
